@@ -1,13 +1,13 @@
 # Trabalho Prático — Teoria de Grafos (PUC Minas)
 
-Ferramenta para minerar colaboração no repositório **[fastapi/typer](https://github.com/fastapi/typer)** (~19,5k estrelas), modelar grafos de interação e calcular métricas de redes — conforme `tp-es.pdf`.
+Ferramenta para minerar colaboração no repositório **[fastapi/typer](https://github.com/fastapi/typer)** (~19,5k estrelas), modelar grafos de interação e calcular métricas de redes.
 
 ## Estrutura
 
 | Pasta / arquivo | Conteúdo                                                    |
 | --------------- | ----------------------------------------------------------- |
-| `graph/`        | Etapa 2 — `AbstractGraph`, matriz, lista, exportação Gephi  |
 | `mining/`       | Etapa 1 — coleta GitHub e construção dos 4 grafos           |
+| `graph/`        | Etapa 2 — `AbstractGraph`, matriz, lista, exportação Gephi  |
 | `analysis/`     | Etapa 3 — centralidades, densidade, clustering, comunidades |
 | `main.py`       | Pipeline completo (minerar → grafos → métricas → export)    |
 | `demo_app.py`   | Demo da API de grafos (Etapa 2)                             |
