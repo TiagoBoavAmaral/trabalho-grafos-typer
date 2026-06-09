@@ -1,13 +1,13 @@
 # Trabalho Prático — Teoria de Grafos (PUC Minas)
 
-Ferramenta para minerar colaboração no repositório **[fastapi/typer](https://github.com/fastapi/typer)** (~19,5k estrelas), modelar grafos de interação e calcular métricas de redes — conforme `tp-es.pdf`.
+Ferramenta para minerar colaboração no repositório **[fastapi/typer](https://github.com/fastapi/typer)** (~19,5k estrelas), modelar grafos de interação e calcular métricas de redes.
 
 ## Estrutura
 
 | Pasta / arquivo | Conteúdo                                                    |
 | --------------- | ----------------------------------------------------------- |
-| `graph/`        | Etapa 2 — `AbstractGraph`, matriz, lista, exportação Gephi  |
 | `mining/`       | Etapa 1 — coleta GitHub e construção dos 4 grafos           |
+| `graph/`        | Etapa 2 — `AbstractGraph`, matriz, lista, exportação Gephi  |
 | `analysis/`     | Etapa 3 — centralidades, densidade, clustering, comunidades |
 | `main.py`       | Pipeline completo (minerar → grafos → métricas → export)    |
 | `demo_app.py`   | Demo da API de grafos (Etapa 2)                             |
@@ -24,11 +24,30 @@ Cada usuário GitHub é um vértice; arestas direcionadas `origem → alvo`.
 
 ## Como executar
 
-### Usando `.env`
+### Configuração (`.env`)
 
-Copie `.env.example` para `.env` e preencha `GITHUB_TOKEN` se quiser minerar com a API do GitHub.
+1. Copie o exemplo:
+   ```bash
+   copy .env.example .env
+   ```
+2. Edite `.env` e preencha pelo menos:
+   ```env
+   GITHUB_TOKEN=seu_token_aqui
+   REPO=fastapi/typer
+   OFFLINE=false
+   MAX_ISSUES=0
+   MAX_PULLS=0
+   ```
+
+O `main.py` **carrega o `.env` automaticamente** ao iniciar. Você **não precisa** exportar o token no terminal se ele já estiver no `.env`.
+
+> **Importante:** o arquivo `.env` não vai para o GitHub (está no `.gitignore`). Nunca commite seu token.
+
+Crie o token em: https://github.com/settings/tokens (escopo `public_repo` ou `repo`).
 
 ### 1) Modo offline (sem token — para testar)
+
+No `.env`, use `OFFLINE=true`, ou rode:
 
 ```bash
 python main.py --offline
@@ -36,17 +55,24 @@ python main.py --offline
 
 Gera em `output/` os `.graphml` e `metricas_integrado.json`.
 
-### 2) Mineração real do Typer (recomendado para entrega)
+### 2) Mineração real do Typer
 
-1. Crie um [Personal Access Token](https://github.com/settings/tokens) (escopo `public_repo` ou `repo`).
-2. No PowerShell:
+Com o `.env` configurado, basta:
+
+```bash
+python main.py
+```
+
+O script usa os valores do `.env` (`GITHUB_TOKEN`, `REPO`, `MAX_ISSUES`, `MAX_PULLS`, etc.).
+
+**Alternativa:** definir o token só na sessão atual do terminal (sobrescreve o `.env`):
 
 ```powershell
 $env:GITHUB_TOKEN = "seu_token_aqui"
-python main.py --repo fastapi/typer --max-issues 0 --max-pulls 0
+python main.py
 ```
 
-Use `0` para minerar tudo. Para repositórios grandes, isso pode levar bastante tempo e usar muitas chamadas de API.
+Use `MAX_ISSUES=0` e `MAX_PULLS=0` no `.env` para minerar tudo. Em repositórios grandes, isso pode levar bastante tempo e consumir muitas chamadas de API.
 
 ### 3) Demo da API de grafos (Etapa 2)
 
@@ -73,4 +99,6 @@ python -m unittest discover -s tests -p "test*.py" -v
 ## Observações
 
 - Não usa `networkX` nem bibliotecas prontas de grafos.
-- Sem `GITHUB_TOKEN`, use `--offline` ou dados em cache (`output/interactions_cache.json`).
+- Com `GITHUB_TOKEN` no `.env`, rode apenas `python main.py`.
+- Sem token, use `OFFLINE=true` no `.env` ou `python main.py --offline`.
+- Resultados reutilizáveis ficam em cache: `output/interactions_cache.json`.
