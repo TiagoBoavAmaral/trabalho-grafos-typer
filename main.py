@@ -1,0 +1,185 @@
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+
+from analysis import compute_metrics
+from mining import InteractionExtractor, build_graphs_from_interactions
+from mining.graph_factory import GraphSet
+
+
+DEFAULT_REPO = "fastapi/typer"
+
+
+def _print_top_users(graph_set: GraphSet, metrics, top_n: int = 10) -> None:
+    idx_to_user = {i: u for u, i in graph_set.user_index.items()}
+    g = graph_set.integrated_graph
+
+    print("\n=== Métricas (grafo integrado) ===")
+    print(f"Vértices: {g.getVertexCount()} | Arestas: {g.getEdgeCount()}")
+    print(f"Densidade: {metrics.density:.4f}")
+    print(f"Clustering: {metrics.clustering_coefficient:.4f}")
+    print(f"Assortatividade: {metrics.assortativity:.4f}")
+    print(f"Modularidade (comunidades): {metrics.modularity:.4f}")
+
+    def top(metric_map, title):
+        ranked = sorted(metric_map.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
+        print(f"\nTop {top_n} — {title}:")
+        for vid, score in ranked:
+            print(f"  {idx_to_user[vid]:20s} {score:.6f}")
+
+    top(metrics.degree_centrality, "Degree centrality")
+    top(metrics.betweenness_centrality, "Betweenness centrality")
+    top(metrics.closeness_centrality, "Closeness centrality")
+    top(metrics.pagerank, "PageRank")
+
+    if metrics.bridging_ties:
+        print("\nBridging ties (alta betweenness entre comunidades):")
+        for vid in metrics.bridging_ties:
+            print(f"  {idx_to_user[vid]}")
+
+
+def _export_graphs(graph_set: GraphSet, out_dir: Path) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    graph_set.comments_graph.exportToGEPHI(str(out_dir / "grafo1_comentarios.graphml"))
+    graph_set.closes_graph.exportToGEPHI(str(out_dir / "grafo2_fechamentos.graphml"))
+    graph_set.pr_actions_graph.exportToGEPHI(str(out_dir / "grafo3_pr_acoes.graphml"))
+    graph_set.integrated_graph.exportToGEPHI(str(out_dir / "grafo_integrado.graphml"))
+
+
+def _save_metrics(metrics, graph_set: GraphSet, path: Path) -> None:
+    idx_to_user = {i: u for u, i in graph_set.user_index.items()}
+
+    def map_users(d):
+        return {idx_to_user[k]: v for k, v in d.items()}
+
+    payload = {
+        "density": metrics.density,
+        "clustering_coefficient": metrics.clustering_coefficient,
+        "assortativity": metrics.assortativity,
+        "modularity": metrics.modularity,
+        "degree_centrality": map_users(metrics.degree_centrality),
+        "betweenness_centrality": map_users(metrics.betweenness_centrality),
+        "closeness_centrality": map_users(metrics.closeness_centrality),
+        "pagerank": map_users(metrics.pagerank),
+        "communities": {idx_to_user[k]: v for k, v in metrics.communities.items()},
+        "bridging_ties": [idx_to_user[v] for v in metrics.bridging_ties],
+    }
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _parse_env_file(env_path: Path) -> dict[str, str]:
+    if not env_path.exists():
+        return {}
+
+    env: dict[str, str] = {}
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        env[key] = value
+    return env
+
+
+def load_env(env_path: Path = Path(".env")) -> None:
+    for key, value in _parse_env_file(env_path).items():
+        if key and value is not None:
+            os.environ.setdefault(key, value)
+
+
+def run_pipeline(
+    repo: str,
+    offline: bool,
+    sample_path: Path,
+    output_dir: Path,
+    max_issues: int,
+    max_pulls: int,
+) -> GraphSet:
+    extractor = InteractionExtractor()
+
+    if offline:
+        interactions = extractor.load_interactions_json(sample_path)
+        print(f"Modo offline: {len(interactions)} interações carregadas de {sample_path}")
+    else:
+        print(f"Minerando repositório {repo} via GitHub API...")
+        interactions = extractor.extract_from_repo(repo, max_issues=max_issues, max_pulls=max_pulls)
+        cache = output_dir / "interactions_cache.json"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        extractor.save_interactions_json(cache, interactions)
+        print(f"{len(interactions)} interações extraídas (cache em {cache})")
+
+    if not interactions:
+        raise RuntimeError("Nenhuma interação encontrada. Use --offline ou aumente limites/token GITHUB_TOKEN.")
+
+    graph_set = build_graphs_from_interactions(interactions)
+    _export_graphs(graph_set, output_dir)
+
+    metrics = compute_metrics(graph_set.integrated_graph)
+    _save_metrics(metrics, graph_set, output_dir / "metricas_integrado.json")
+    _print_top_users(graph_set, metrics)
+
+    print(f"\nArquivos gerados em: {output_dir.resolve()}")
+    return graph_set
+
+
+def main() -> None:
+    load_env(Path(".env"))
+
+    env_offline = os.environ.get("OFFLINE", "false").lower() in ("1", "true", "yes", "y")
+    parser = argparse.ArgumentParser(
+        description="Ferramenta de análise de colaboração GitHub — fastapi/typer (Etapas 1–3)"
+    )
+    parser.add_argument(
+        "--repo",
+        default=os.environ.get("REPO", DEFAULT_REPO),
+        help="owner/name ou URL do repositório",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        default=env_offline,
+        help="usa dados de exemplo (sem chamar a API)",
+    )
+    parser.add_argument(
+        "--sample",
+        default=os.environ.get("SAMPLE", "data/sample_typer_interactions.json"),
+        help="JSON de interações para modo offline",
+    )
+    parser.add_argument(
+        "--output",
+        default=os.environ.get("OUTPUT", "output"),
+        help="pasta de saída",
+    )
+    parser.add_argument(
+        "--max-issues",
+        type=int,
+        default=int(os.environ.get("MAX_ISSUES", "30")),
+        help="limite de issues mineradas",
+    )
+    parser.add_argument(
+        "--max-pulls",
+        type=int,
+        default=int(os.environ.get("MAX_PULLS", "30")),
+        help="limite de PRs minerados",
+    )
+    args = parser.parse_args()
+
+    run_pipeline(
+        repo=args.repo,
+        offline=args.offline,
+        sample_path=Path(args.sample),
+        output_dir=Path(args.output),
+        max_issues=args.max_issues,
+        max_pulls=args.max_pulls,
+    )
+
+
+if __name__ == "__main__":
+    main()

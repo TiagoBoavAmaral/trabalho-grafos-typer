@@ -1,0 +1,11 @@
+[
+  {"source": "tiangolo", "target": "dependabot", "kind": "comment", "reference": "issue#100"},
+  {"source": "tiangolo", "target": "dependabot", "kind": "issue_open_commented", "reference": "issue#100"},
+  {"source": "Kludex", "target": "tiangolo", "kind": "comment", "reference": "pr#200"},
+  {"source": "Kludex", "target": "tiangolo", "kind": "pr_review", "reference": "pr#200"},
+  {"source": "tiangolo", "target": "Kludex", "kind": "pr_merge", "reference": "pr#200"},
+  {"source": "dependabot", "target": "tiangolo", "kind": "comment", "reference": "issue#101"},
+  {"source": "tiangolo", "target": "dependabot", "kind": "issue_close", "reference": "issue#101"},
+  {"source": "samuelcolvin", "target": "tiangolo", "kind": "pr_review", "reference": "pr#201"},
+  {"source": "samuelcolvin", "target": "Kludex", "kind": "comment", "reference": "pr#202"}
+]
