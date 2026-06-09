@@ -36,7 +36,7 @@ python main.py --offline
 
 Gera em `output/` os `.graphml` e `metricas_integrado.json`.
 
-### 2) Mineração real do Typer (recomendado para entrega)
+### 2) Mineração real do Typer
 
 1. Crie um [Personal Access Token](https://github.com/settings/tokens) (escopo `public_repo` ou `repo`).
 2. No PowerShell:
