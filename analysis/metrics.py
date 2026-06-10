@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from graph.abstract_graph import AbstractGraph
+from graph.adjacency_list_graph import AdjacencyListGraph
+from graph.adjacency_matrix_graph import AdjacencyMatrixGraph
 
 
 @dataclass
@@ -21,48 +23,86 @@ class NetworkMetrics:
     bridging_ties: List[int]
 
 
-def _neighbors_out(g: AbstractGraph, u: int) -> List[int]:
-    n = g.getVertexCount()
-    return [v for v in range(n) if v != u and g.hasEdge(u, v)]
+@dataclass
+class _GraphIndex:
+    """Índices de adjacência pré-computados para evitar varreduras O(n) repetidas."""
+
+    n: int
+    edge_count: int
+    out_neighbors: List[List[int]]
+    undirected_neighbors: List[List[int]]
+    undirected_sets: List[Set[int]]
+    out_edges: List[List[Tuple[int, float]]]
+    total_degree: List[int]
+
+    @classmethod
+    def from_graph(cls, g: AbstractGraph) -> _GraphIndex:
+        n = g.getVertexCount()
+        out_neighbors = cls._build_out_neighbors(g, n)
+        undirected_neighbors, undirected_sets = cls._build_undirected(out_neighbors, n)
+        out_edges: List[List[Tuple[int, float]]] = []
+        total_degree = [0] * n
+
+        for u in range(n):
+            edges = [(v, g.getEdgeWeight(u, v)) for v in out_neighbors[u]]
+            out_edges.append(edges)
+            total_degree[u] = g.getVertexInDegree(u) + g.getVertexOutDegree(u)
+
+        return cls(
+            n=n,
+            edge_count=g.getEdgeCount(),
+            out_neighbors=out_neighbors,
+            undirected_neighbors=undirected_neighbors,
+            undirected_sets=undirected_sets,
+            out_edges=out_edges,
+            total_degree=total_degree,
+        )
+
+    @staticmethod
+    def _build_out_neighbors(g: AbstractGraph, n: int) -> List[List[int]]:
+        if isinstance(g, AdjacencyListGraph):
+            return [list(g._adj[u].keys()) for u in range(n)]
+        if isinstance(g, AdjacencyMatrixGraph):
+            return [[v for v in range(n) if g._adj[u][v]] for u in range(n)]
+        return [[v for v in range(n) if v != u and g.hasEdge(u, v)] for u in range(n)]
+
+    @staticmethod
+    def _build_undirected(
+        out_neighbors: List[List[int]], n: int
+    ) -> Tuple[List[List[int]], List[Set[int]]]:
+        undirected_sets: List[Set[int]] = [set() for _ in range(n)]
+        for u in range(n):
+            for v in out_neighbors[u]:
+                undirected_sets[u].add(v)
+                undirected_sets[v].add(u)
+        undirected_neighbors = [sorted(s) for s in undirected_sets]
+        return undirected_neighbors, undirected_sets
 
 
-def _neighbors_undirected(g: AbstractGraph, u: int) -> List[int]:
-    n = g.getVertexCount()
-    nb = set()
-    for v in range(n):
-        if v == u:
-            continue
-        if g.hasEdge(u, v) or g.hasEdge(v, u):
-            nb.add(v)
-    return list(nb)
-
-
-def _bfs_distances(g: AbstractGraph, source: int, undirected: bool = True) -> Dict[int, int]:
-    n = g.getVertexCount()
+def _bfs_distances(idx: _GraphIndex, source: int, undirected: bool = True) -> Dict[int, int]:
     dist = {source: 0}
     q: deque[int] = deque([source])
+    neighbors = idx.undirected_neighbors if undirected else idx.out_neighbors
     while q:
         u = q.popleft()
-        for v in _neighbors_undirected(g, u) if undirected else _neighbors_out(g, u):
+        for v in neighbors[u]:
             if v not in dist:
                 dist[v] = dist[u] + 1
                 q.append(v)
     return dist
 
 
-def degree_centrality(g: AbstractGraph) -> Dict[int, float]:
-    n = g.getVertexCount()
+def degree_centrality(idx: _GraphIndex) -> Dict[int, float]:
+    n = idx.n
     if n <= 1:
         return {i: 0.0 for i in range(n)}
     denom = n - 1
-    out: Dict[int, float] = {}
-    for u in range(n):
-        out[u] = g.getVertexOutDegree(u) / denom
-    return out
+    return {u: len(idx.out_neighbors[u]) / denom for u in range(n)}
 
 
-def betweenness_centrality(g: AbstractGraph) -> Dict[int, float]:
-    n = g.getVertexCount()
+def betweenness_centrality(idx: _GraphIndex) -> Dict[int, float]:
+    n = idx.n
+    neighbors = idx.undirected_neighbors
     cb = [0.0] * n
     for s in range(n):
         stack: List[int] = []
@@ -75,7 +115,7 @@ def betweenness_centrality(g: AbstractGraph) -> Dict[int, float]:
         while q:
             v = q.popleft()
             stack.append(v)
-            for w in _neighbors_undirected(g, v):
+            for w in neighbors[v]:
                 if dist[w] < 0:
                     dist[w] = dist[v] + 1
                     q.append(w)
@@ -94,11 +134,11 @@ def betweenness_centrality(g: AbstractGraph) -> Dict[int, float]:
     return {i: cb[i] * scale for i in range(n)}
 
 
-def closeness_centrality(g: AbstractGraph) -> Dict[int, float]:
-    n = g.getVertexCount()
+def closeness_centrality(idx: _GraphIndex) -> Dict[int, float]:
+    n = idx.n
     out: Dict[int, float] = {}
     for u in range(n):
-        dist = _bfs_distances(g, u, undirected=True)
+        dist = _bfs_distances(idx, u, undirected=True)
         total = sum(dist.values())
         reachable = len(dist) - 1
         if total == 0 or reachable == 0:
@@ -108,25 +148,24 @@ def closeness_centrality(g: AbstractGraph) -> Dict[int, float]:
     return out
 
 
-def pagerank(g: AbstractGraph, damping: float = 0.85, max_iter: int = 100, tol: float = 1e-6) -> Dict[int, float]:
-    n = g.getVertexCount()
+def pagerank(
+    idx: _GraphIndex, damping: float = 0.85, max_iter: int = 100, tol: float = 1e-6
+) -> Dict[int, float]:
+    n = idx.n
     if n == 0:
         return {}
     rank = [1.0 / n] * n
-    out_w = [0.0] * n
-    for u in range(n):
-        for v in _neighbors_out(g, u):
-            out_w[u] += g.getEdgeWeight(u, v)
+    out_w = [sum(w for _, w in edges) for edges in idx.out_edges]
 
     for _ in range(max_iter):
         new = [(1.0 - damping) / n] * n
         for u in range(n):
             if out_w[u] == 0:
+                share = damping * rank[u] / n
                 for v in range(n):
-                    new[v] += damping * rank[u] / n
+                    new[v] += share
                 continue
-            for v in _neighbors_out(g, u):
-                w = g.getEdgeWeight(u, v)
+            for v, w in idx.out_edges[u]:
                 new[v] += damping * rank[u] * (w / out_w[u])
         diff = sum(abs(new[i] - rank[i]) for i in range(n))
         rank = new
@@ -136,40 +175,39 @@ def pagerank(g: AbstractGraph, damping: float = 0.85, max_iter: int = 100, tol: 
     return {i: rank[i] / s for i in range(n)}
 
 
-def density(g: AbstractGraph) -> float:
-    n = g.getVertexCount()
+def density(idx: _GraphIndex) -> float:
+    n = idx.n
     if n <= 1:
         return 0.0
-    return g.getEdgeCount() / (n * (n - 1))
+    return idx.edge_count / (n * (n - 1))
 
 
-def global_clustering_coefficient(g: AbstractGraph) -> float:
-    n = g.getVertexCount()
+def global_clustering_coefficient(idx: _GraphIndex) -> float:
     triangles = 0
     triples = 0
-    for u in range(n):
-        nb = _neighbors_undirected(g, u)
+    neighbor_sets = idx.undirected_sets
+    for u in range(idx.n):
+        nb = idx.undirected_neighbors[u]
         k = len(nb)
         if k < 2:
             continue
         triples += k * (k - 1) // 2
         for i in range(k):
             for j in range(i + 1, k):
-                if g.hasEdge(nb[i], nb[j]) or g.hasEdge(nb[j], nb[i]):
+                if nb[j] in neighbor_sets[nb[i]]:
                     triangles += 1
     if triples == 0:
         return 0.0
     return triangles / triples
 
 
-def degree_assortativity(g: AbstractGraph) -> float:
+def degree_assortativity(idx: _GraphIndex) -> float:
     """Correlação de Pearson entre graus (entrada+saída) dos extremos das arestas."""
-    n = g.getVertexCount()
-    deg = [g.getVertexInDegree(i) + g.getVertexOutDegree(i) for i in range(n)]
+    deg = idx.total_degree
     xs: List[float] = []
     ys: List[float] = []
-    for u in range(n):
-        for v in _neighbors_out(g, u):
+    for u in range(idx.n):
+        for v in idx.out_neighbors[u]:
             xs.append(float(deg[u]))
             ys.append(float(deg[v]))
     if len(xs) < 2:
@@ -184,16 +222,17 @@ def degree_assortativity(g: AbstractGraph) -> float:
     return num / (den_x * den_y)
 
 
-def label_propagation_communities(g: AbstractGraph, max_iter: int = 50) -> Dict[int, int]:
-    n = g.getVertexCount()
+def label_propagation_communities(idx: _GraphIndex, max_iter: int = 50) -> Dict[int, int]:
+    n = idx.n
     label = {i: i for i in range(n)}
+    neighbor_degrees = [len(idx.undirected_neighbors[u]) for u in range(n)]
     for _ in range(max_iter):
         changed = False
         order = list(range(n))
-        order.sort(key=lambda x: len(_neighbors_undirected(g, x)), reverse=True)
+        order.sort(key=lambda x: neighbor_degrees[x], reverse=True)
         for u in order:
             counts: Dict[int, int] = defaultdict(int)
-            for v in _neighbors_undirected(g, u):
+            for v in idx.undirected_neighbors[u]:
                 counts[label[v]] += 1
             if not counts:
                 continue
@@ -206,43 +245,84 @@ def label_propagation_communities(g: AbstractGraph, max_iter: int = 50) -> Dict[
     return label
 
 
-def modularity(g: AbstractGraph, communities: Dict[int, int]) -> float:
-    n = g.getVertexCount()
-    m = g.getEdgeCount()
+def modularity(idx: _GraphIndex, communities: Dict[int, int]) -> float:
+    m = idx.edge_count
     if m == 0:
         return 0.0
-    deg = [g.getVertexInDegree(i) + g.getVertexOutDegree(i) for i in range(n)]
+    deg = idx.total_degree
     q = 0.0
-    for u in range(n):
-        for v in _neighbors_out(g, u):
+    for u in range(idx.n):
+        for v in idx.out_neighbors[u]:
             if communities[u] == communities[v]:
                 q += 1.0 - (deg[u] * deg[v]) / (2.0 * m)
     return q / (2.0 * m)
 
 
-def bridging_ties(g: AbstractGraph, communities: Dict[int, int], betweenness: Dict[int, float], top_k: int = 5) -> List[int]:
-    n = g.getVertexCount()
+def bridging_ties(
+    idx: _GraphIndex,
+    communities: Dict[int, int],
+    betweenness: Dict[int, float],
+    top_k: int = 5,
+) -> List[int]:
     scores: List[Tuple[float, int]] = []
-    for u in range(n):
-        neighbor_comms = {communities[v] for v in _neighbors_undirected(g, u)}
+    for u in range(idx.n):
+        neighbor_comms = {communities[v] for v in idx.undirected_neighbors[u]}
         if len(neighbor_comms) >= 2:
             scores.append((betweenness.get(u, 0.0), u))
     scores.sort(reverse=True)
     return [u for _, u in scores[:top_k]]
 
 
-def compute_metrics(g: AbstractGraph) -> NetworkMetrics:
-    comm = label_propagation_communities(g)
-    bet = betweenness_centrality(g)
+def compute_metrics(
+    g: AbstractGraph,
+    *,
+    verbose: bool = False,
+    progress: Optional[Callable[[str], None]] = None,
+) -> NetworkMetrics:
+    def log(msg: str) -> None:
+        if progress is not None:
+            progress(msg)
+        elif verbose:
+            print(msg, flush=True)
+
+    log("  Indexando adjacências do grafo...")
+    idx = _GraphIndex.from_graph(g)
+    log(f"  Grafo: {idx.n} vértices, {idx.edge_count} arestas")
+
+    log("  Degree centrality...")
+    deg = degree_centrality(idx)
+
+    log("  Comunidades (label propagation)...")
+    comm = label_propagation_communities(idx)
+
+    log("  Betweenness centrality...")
+    bet = betweenness_centrality(idx)
+
+    log("  Closeness centrality...")
+    close = closeness_centrality(idx)
+
+    log("  PageRank...")
+    pr = pagerank(idx)
+
+    log("  Densidade, clustering e assortatividade...")
+    dens = density(idx)
+    clust = global_clustering_coefficient(idx)
+    assort = degree_assortativity(idx)
+
+    log("  Modularidade e bridging ties...")
+    mod = modularity(idx, comm)
+    bridges = bridging_ties(idx, comm, bet)
+
+    log("  Métricas concluídas.")
     return NetworkMetrics(
-        degree_centrality=degree_centrality(g),
+        degree_centrality=deg,
         betweenness_centrality=bet,
-        closeness_centrality=closeness_centrality(g),
-        pagerank=pagerank(g),
-        density=density(g),
-        clustering_coefficient=global_clustering_coefficient(g),
-        assortativity=degree_assortativity(g),
+        closeness_centrality=close,
+        pagerank=pr,
+        density=dens,
+        clustering_coefficient=clust,
+        assortativity=assort,
         communities=comm,
-        modularity=modularity(g, comm),
-        bridging_ties=bridging_ties(g, comm, bet),
+        modularity=mod,
+        bridging_ties=bridges,
     )

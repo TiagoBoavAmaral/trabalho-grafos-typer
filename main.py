@@ -101,27 +101,56 @@ def run_pipeline(
     output_dir: Path,
     max_issues: int,
     max_pulls: int,
+    use_cache: bool,
+    workers: int,
 ) -> GraphSet:
-    extractor = InteractionExtractor()
+    extractor = InteractionExtractor(workers=workers)
+    cache = output_dir / "interactions_cache.json"
 
     if offline:
         interactions = extractor.load_interactions_json(sample_path)
         print(f"Modo offline: {len(interactions)} interações carregadas de {sample_path}")
+    elif use_cache:
+        cached = extractor.load_cache_if_valid(cache, repo, max_issues, max_pulls)
+        if cached is not None:
+            interactions = cached
+            print(
+                f"Cache válido: {len(interactions)} interações carregadas de {cache} "
+                f"(use --no-cache para forçar nova mineração)"
+            )
+        else:
+            print(f"Cache ausente ou incompatível em {cache}; minerando via GitHub API...")
+            interactions = extractor.extract_from_repo(repo, max_issues=max_issues, max_pulls=max_pulls)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            extractor.save_interactions_json(cache, interactions)
+            extractor.save_cache_meta(cache, repo, max_issues, max_pulls, len(interactions))
+            print(f"{len(interactions)} interações extraídas (cache salvo em {cache})")
     else:
-        print(f"Minerando repositório {repo} via GitHub API...")
+        print(f"Minerando repositório {repo} via GitHub API ({workers} workers)...")
         interactions = extractor.extract_from_repo(repo, max_issues=max_issues, max_pulls=max_pulls)
-        cache = output_dir / "interactions_cache.json"
         output_dir.mkdir(parents=True, exist_ok=True)
         extractor.save_interactions_json(cache, interactions)
-        print(f"{len(interactions)} interações extraídas (cache em {cache})")
+        extractor.save_cache_meta(cache, repo, max_issues, max_pulls, len(interactions))
+        print(f"{len(interactions)} interações extraídas (cache salvo em {cache})")
 
     if not interactions:
         raise RuntimeError("Nenhuma interação encontrada. Use --offline ou aumente limites/token GITHUB_TOKEN.")
 
+    print("Construindo grafos a partir das interações...")
     graph_set = build_graphs_from_interactions(interactions)
-    _export_graphs(graph_set, output_dir)
+    g = graph_set.integrated_graph
+    print(
+        f"  {len(graph_set.users)} usuários | "
+        f"comentários: {graph_set.comments_graph.getEdgeCount()} arestas | "
+        f"integrado: {g.getEdgeCount()} arestas"
+    )
 
-    metrics = compute_metrics(graph_set.integrated_graph)
+    print("Exportando arquivos GraphML...")
+    _export_graphs(graph_set, output_dir)
+    print("  4 arquivos .graphml salvos em", output_dir.resolve())
+
+    print("Calculando métricas de rede (grafo integrado)...")
+    metrics = compute_metrics(g, verbose=True)
     _save_metrics(metrics, graph_set, output_dir / "metricas_integrado.json")
     _print_top_users(graph_set, metrics)
 
@@ -133,6 +162,7 @@ def main() -> None:
     load_env(Path(".env"))
 
     env_offline = os.environ.get("OFFLINE", "false").lower() in ("1", "true", "yes", "y")
+    env_use_cache = os.environ.get("USE_CACHE", "false").lower() in ("1", "true", "yes", "y")
     parser = argparse.ArgumentParser(
         description="Ferramenta de análise de colaboração GitHub — fastapi/typer (Etapas 1–3)"
     )
@@ -169,7 +199,27 @@ def main() -> None:
         default=int(os.environ.get("MAX_PULLS", "30")),
         help="limite de PRs minerados",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=int(os.environ.get("WORKERS", "8")),
+        help="requisições paralelas à API do GitHub",
+    )
+    cache_group = parser.add_mutually_exclusive_group()
+    cache_group.add_argument(
+        "--use-cache",
+        action="store_true",
+        default=env_use_cache,
+        help="reutiliza interactions_cache.json se compatível com repo/limites",
+    )
+    cache_group.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="força nova mineração mesmo com --use-cache no .env",
+    )
     args = parser.parse_args()
+
+    use_cache = args.use_cache and not args.no_cache
 
     run_pipeline(
         repo=args.repo,
@@ -178,6 +228,8 @@ def main() -> None:
         output_dir=Path(args.output),
         max_issues=args.max_issues,
         max_pulls=args.max_pulls,
+        use_cache=use_cache,
+        workers=args.workers,
     )
 
 
