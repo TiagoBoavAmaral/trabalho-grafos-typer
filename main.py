@@ -3,7 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
+
+base_dir = Path(__file__).parent
+sys.path.append(str(base_dir / "Etapa 1"))
+sys.path.append(str(base_dir / "Etapa 2"))
+sys.path.append(str(base_dir / "Etapa 3"))
 
 from analysis import compute_metrics
 from mining import InteractionExtractor, build_graphs_from_interactions
