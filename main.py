@@ -96,7 +96,7 @@ def load_env(env_path: Path = Path(".env")) -> None:
             os.environ.setdefault(key, value)
 
 
-def run_pipeline(
+def load_or_mine_interactions(
     repo: str,
     offline: bool,
     sample_path: Path,
@@ -105,7 +105,7 @@ def run_pipeline(
     max_pulls: int,
     use_cache: bool,
     workers: int,
-) -> GraphSet:
+) -> list:
     extractor = InteractionExtractor(workers=workers)
     cache = output_dir / "interactions_cache.json"
 
@@ -138,6 +138,23 @@ def run_pipeline(
     if not interactions:
         raise RuntimeError("Nenhuma interação encontrada. Use --offline ou aumente limites/token GITHUB_TOKEN.")
 
+    return interactions
+
+
+def run_pipeline(
+    repo: str,
+    offline: bool,
+    sample_path: Path,
+    output_dir: Path,
+    max_issues: int,
+    max_pulls: int,
+    use_cache: bool,
+    workers: int,
+) -> GraphSet:
+    interactions = load_or_mine_interactions(
+        repo, offline, sample_path, output_dir, max_issues, max_pulls, use_cache, workers
+    )
+
     print("Construindo grafos a partir das interações...")
     graph_set = build_graphs_from_interactions(interactions)
     g = graph_set.integrated_graph
@@ -158,6 +175,116 @@ def run_pipeline(
 
     print(f"\nArquivos gerados em: {output_dir.resolve()}")
     return graph_set
+
+
+def interactive_menu(args) -> None:
+    interactions = None
+    graph_set = None
+    
+    out_dir = Path(args.output)
+    use_cache = args.use_cache and not args.no_cache
+    
+    while True:
+        print("\n" + "=" * 50)
+        print("                MENU PRINCIPAL")
+        print("=" * 50)
+        print("1 - Extrair / Carregar Dados (Mineração)")
+        print("2 - Gerar todos os grafos")
+        print("3 - Exportar grafo de comentários (.graphml)")
+        print("4 - Exportar grafo de fechamentos (.graphml)")
+        print("5 - Exportar grafo de ações de PR (.graphml)")
+        print("6 - Exportar grafo integrado (.graphml)")
+        print("7 - Analisar centralidade e métricas")
+        print("8 - Executar Pipeline Completo (Automático)")
+        print("0 - Sair")
+        print("=" * 50)
+        
+        opcao = input("Escolha uma opção: ").strip()
+        
+        if opcao == "0":
+            print("Encerrando...")
+            break
+            
+        elif opcao == "1":
+            try:
+                interactions = load_or_mine_interactions(
+                    repo=args.repo,
+                    offline=args.offline,
+                    sample_path=Path(args.sample),
+                    output_dir=out_dir,
+                    max_issues=args.max_issues,
+                    max_pulls=args.max_pulls,
+                    use_cache=use_cache,
+                    workers=args.workers,
+                )
+            except Exception as e:
+                print(f"Erro ao carregar dados: {e}")
+                
+        elif opcao == "2":
+            if not interactions:
+                print("Por favor, execute a opção 1 primeiro para extrair/carregar os dados.")
+                continue
+            print("Construindo grafos a partir das interações...")
+            graph_set = build_graphs_from_interactions(interactions)
+            g = graph_set.integrated_graph
+            print(
+                f"  {len(graph_set.users)} usuários | "
+                f"comentários: {graph_set.comments_graph.getEdgeCount()} arestas | "
+                f"integrado: {g.getEdgeCount()} arestas"
+            )
+            print("Grafos gerados com sucesso!")
+            
+        elif opcao in ["3", "4", "5", "6"]:
+            if not graph_set:
+                print("Por favor, execute a opção 2 primeiro para gerar os grafos.")
+                continue
+            out_dir.mkdir(parents=True, exist_ok=True)
+            if opcao == "3":
+                path = out_dir / "grafo1_comentarios.graphml"
+                graph_set.comments_graph.exportToGEPHI(str(path))
+                print(f"Grafo exportado para {path}")
+            elif opcao == "4":
+                path = out_dir / "grafo2_fechamentos.graphml"
+                graph_set.closes_graph.exportToGEPHI(str(path))
+                print(f"Grafo exportado para {path}")
+            elif opcao == "5":
+                path = out_dir / "grafo3_pr_acoes.graphml"
+                graph_set.pr_actions_graph.exportToGEPHI(str(path))
+                print(f"Grafo exportado para {path}")
+            elif opcao == "6":
+                path = out_dir / "grafo_integrado.graphml"
+                graph_set.integrated_graph.exportToGEPHI(str(path))
+                print(f"Grafo exportado para {path}")
+                
+        elif opcao == "7":
+            if not graph_set:
+                print("Por favor, execute a opção 2 primeiro para gerar os grafos.")
+                continue
+            print("Calculando métricas de rede (grafo integrado)...")
+            g = graph_set.integrated_graph
+            metrics = compute_metrics(g, verbose=True)
+            _save_metrics(metrics, graph_set, out_dir / "metricas_integrado.json")
+            _print_top_users(graph_set, metrics)
+            print(f"Métricas salvas em {out_dir / 'metricas_integrado.json'}")
+            
+        elif opcao == "8":
+            try:
+                graph_set = run_pipeline(
+                    repo=args.repo,
+                    offline=args.offline,
+                    sample_path=Path(args.sample),
+                    output_dir=out_dir,
+                    max_issues=args.max_issues,
+                    max_pulls=args.max_pulls,
+                    use_cache=use_cache,
+                    workers=args.workers,
+                )
+                print("Pipeline concluído com sucesso!")
+            except Exception as e:
+                print(f"Erro na execução do pipeline: {e}")
+                
+        else:
+            print("Opção inválida.")
 
 
 def main() -> None:
@@ -221,18 +348,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    use_cache = args.use_cache and not args.no_cache
-
-    run_pipeline(
-        repo=args.repo,
-        offline=args.offline,
-        sample_path=Path(args.sample),
-        output_dir=Path(args.output),
-        max_issues=args.max_issues,
-        max_pulls=args.max_pulls,
-        use_cache=use_cache,
-        workers=args.workers,
-    )
+    interactive_menu(args)
 
 
 if __name__ == "__main__":

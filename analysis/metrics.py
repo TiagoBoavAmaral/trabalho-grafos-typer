@@ -149,32 +149,13 @@ def closeness_centrality(idx: _GraphIndex) -> Dict[int, float]:
     return out
 
 
-def _symmetric_adjacency_matrix(idx: _GraphIndex) -> List[List[float]]:
-    """Matriz de adjacência simetrizada e ponderada do grafo subjacente."""
-    n = idx.n
-    mat = [[0.0] * n for _ in range(n)]
-    for u in range(n):
-        for v, w in idx.out_edges[u]:
-            mat[u][v] += w
-            mat[v][u] += w
-    return mat
-
-
-def _matrix_square(mat: List[List[float]]) -> List[List[float]]:
-    n = len(mat)
-    sq = [[0.0] * n for _ in range(n)]
-    for i in range(n):
-        for j in range(n):
-            sq[i][j] = sum(mat[i][k] * mat[k][j] for k in range(n))
-    return sq
-
-
 def eigenvector_centrality(
     idx: _GraphIndex, max_iter: int = 100, tol: float = 1e-6
 ) -> Dict[int, float]:
     """
     Centralidade de autovetor via power iteration em A², onde A é a adjacência
-    simetrizada. A² evita oscilação em grafos bipartidos e mantém vetores positivos.
+    simetrizada. O cálculo usa listas de adjacência (matriz esparsa) para evitar
+    a complexidade O(n³) da multiplicação de matrizes densas.
     """
     n = idx.n
     if n == 0:
@@ -182,13 +163,30 @@ def eigenvector_centrality(
     if n == 1:
         return {0: 1.0}
 
-    mat_sq = _matrix_square(_symmetric_adjacency_matrix(idx))
+    # Constrói adjacência simetrizada esparsa
+    sym_adj: List[Dict[int, float]] = [defaultdict(float) for _ in range(n)]
+    for u in range(n):
+        for v, w in idx.out_edges[u]:
+            sym_adj[u][v] += w
+            sym_adj[v][u] += w
+
+    def multiply_A(vec: List[float]) -> List[float]:
+        res = [0.0] * n
+        for u in range(n):
+            for v, w in sym_adj[u].items():
+                res[u] += w * vec[v]
+        return res
+
     # Inicialização enviesada pelo grau para evitar autovetores degenerados simétricos.
     x = [float(len(idx.undirected_neighbors[i])) + 1e-6 for i in range(n)]
     init_norm = sum(v * v for v in x) ** 0.5
     x = [v / init_norm for v in x]
+    
     for _ in range(max_iter):
-        new = [sum(mat_sq[i][j] * x[j] for j in range(n)) for i in range(n)]
+        # A^2 * x = A * (A * x)
+        y = multiply_A(x)
+        new = multiply_A(y)
+        
         norm = sum(v * v for v in new) ** 0.5
         if norm == 0:
             return {i: 0.0 for i in range(n)}
@@ -197,6 +195,7 @@ def eigenvector_centrality(
         x = new
         if diff < tol:
             break
+            
     total = sum(x) or 1.0
     return {i: x[i] / total for i in range(n)}
 
