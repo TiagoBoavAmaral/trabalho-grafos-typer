@@ -63,6 +63,7 @@ class GitHubClient:
         if reset_at is not None:
             wait = max(0.0, reset_at - time.time()) + 1.0
             if wait > 0:
+                print(f"\n[Aviso] Aproximando-se do Rate Limit. Aguardando {wait:.0f}s para resetar...")
                 time.sleep(wait)
 
     def _sleep_until_reset(self, headers: Message) -> None:
@@ -70,8 +71,10 @@ class GitHubClient:
         if reset is not None:
             wait = max(0.0, reset - time.time()) + 1.0
             if wait > 0:
+                print(f"\n[Aviso] Rate Limit do GitHub esgotado! Pausando por {wait:.0f}s até o reset...")
                 time.sleep(wait)
                 return
+        print("\n[Aviso] Rate Limit do GitHub esgotado! Pausando por 60s...")
         time.sleep(60.0)
 
     def _request(self, path: str, params: Optional[Dict[str, str]] = None) -> Any:
