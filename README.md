@@ -6,12 +6,11 @@ Ferramenta para minerar colaboração no repositório **[fastapi/typer](https://
 
 | Pasta / arquivo | Conteúdo                                                    |
 | --------------- | ----------------------------------------------------------- |
-| `mining/`       | Etapa 1 — coleta GitHub e construção dos 4 grafos           |
-| `graph/`        | Etapa 2 — `AbstractGraph`, matriz, lista, exportação Gephi  |
-| `analysis/`     | Etapa 3 — centralidades, densidade, clustering, comunidades |
-| `main.py`       | Pipeline completo (minerar → grafos → métricas → export)    |
-| `demo_app.py`   | Demo da API de grafos (Etapa 2)                             |
-| `tests/`        | Testes unitários                                            |
+| `Etapa 1/`      | Coleta GitHub, mineração e construção dos 4 grafos          |
+| `Etapa 2/`      | `AbstractGraph`, matriz, lista, exportação Gephi e demo     |
+| `Etapa 3/`      | Métricas de rede, centralidades, densidade, comunidades     |
+| `main.py`       | Pipeline completo interativo e configuração de paths        |
+| `documentacao/` | Pasta reservada para arquivos de texto e documentações      |
 
 ## Grafos gerados (modelagem)
 
@@ -77,13 +76,18 @@ Use `MAX_ISSUES=0` e `MAX_PULLS=0` no `.env` para minerar tudo. Em repositórios
 ### 3) Demo da API de grafos (Etapa 2)
 
 ```bash
-python demo_app.py
+python "Etapa 2/demo_app.py"
 ```
 
 ### 4) Testes
 
-```bash
-python -m unittest discover -s tests -p "test*.py" -v
+Como as pastas foram divididas por etapa, você precisa incluir elas no `PYTHONPATH` para rodar os testes. No PowerShell:
+
+```powershell
+$env:PYTHONPATH = "Etapa 1;Etapa 2;Etapa 3"
+python -m unittest discover -s "Etapa 1/tests" -p "test*.py" -v
+python -m unittest discover -s "Etapa 2/tests" -p "test*.py" -v
+python -m unittest discover -s "Etapa 3/tests" -p "test*.py" -v
 ```
 
 ## Plano de aceitação — Etapa 2 (API de grafos)
