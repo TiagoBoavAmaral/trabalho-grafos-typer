@@ -125,6 +125,48 @@ class GraphAPITestMixin:
         self.g.setEdgeWeight(0, 1, 2.5)
         export_and_check(self.g)
 
+    def test_getVertexCount(self):
+        self.assertEqual(self.g.getVertexCount(), 4)
+
+    def test_invalid_vertex_index_raises(self):
+        for method, args in (
+            (self.g.hasEdge, (-1, 0)),
+            (self.g.hasEdge, (0, 4)),
+            (self.g.addEdge, (0, 5)),
+            (self.g.removeEdge, (3, -1)),
+            (self.g.getVertexInDegree, (4,)),
+            (self.g.getVertexOutDegree, (-1,)),
+            (self.g.setVertexWeight, (4, 1.0)),
+            (self.g.getVertexWeight, (-1,)),
+            (self.g.isSucessor, (0, 4)),
+            (self.g.isPredessor, (4, 0)),
+            (self.g.isIncident, (0, 1, 4)),
+        ):
+            with self.subTest(method=method.__name__, args=args):
+                with self.assertRaises(IndexError):
+                    method(*args)
+
+    def test_invalid_edge_index_on_weight_ops_raises(self):
+        self.g.addEdge(0, 1)
+        with self.assertRaises(IndexError):
+            self.g.setEdgeWeight(0, 4, 1.0)
+        with self.assertRaises(IndexError):
+            self.g.getEdgeWeight(4, 1)
+
+    def test_invalid_vertex_type_raises(self):
+        with self.assertRaises(TypeError):
+            self.g.addEdge(0.5, 1)  # type: ignore[arg-type]
+        with self.assertRaises(TypeError):
+            self.g.setVertexWeight(0, "x")  # type: ignore[arg-type]
+
+    def test_invalid_num_vertices_constructor(self):
+        with self.assertRaises(ValueError):
+            self.GraphClass(0)
+        with self.assertRaises(ValueError):
+            self.GraphClass(-1)
+        with self.assertRaises(TypeError):
+            self.GraphClass(3.5)  # type: ignore[arg-type]
+
 
 class AdjacencyMatrixGraphAPITest(GraphAPITestMixin, unittest.TestCase):
     GraphClass = AdjacencyMatrixGraph

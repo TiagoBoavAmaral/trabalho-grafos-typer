@@ -34,6 +34,7 @@ def _print_top_users(graph_set: GraphSet, metrics, top_n: int = 10) -> None:
     top(metrics.betweenness_centrality, "Betweenness centrality")
     top(metrics.closeness_centrality, "Closeness centrality")
     top(metrics.pagerank, "PageRank")
+    top(metrics.eigenvector_centrality, "Eigenvector centrality")
 
     if metrics.bridging_ties:
         print("\nBridging ties (alta betweenness entre comunidades):")
@@ -64,6 +65,7 @@ def _save_metrics(metrics, graph_set: GraphSet, path: Path) -> None:
         "betweenness_centrality": map_users(metrics.betweenness_centrality),
         "closeness_centrality": map_users(metrics.closeness_centrality),
         "pagerank": map_users(metrics.pagerank),
+        "eigenvector_centrality": map_users(metrics.eigenvector_centrality),
         "communities": {idx_to_user[k]: v for k, v in metrics.communities.items()},
         "bridging_ties": [idx_to_user[v] for v in metrics.bridging_ties],
     }

@@ -86,6 +86,56 @@ python demo_app.py
 python -m unittest discover -s tests -p "test*.py" -v
 ```
 
+## Plano de aceitação — Etapa 2 (API de grafos)
+
+Cada requisito do enunciado é verificado pelos testes em `tests/test_graph_api.py` (executados para `AdjacencyMatrixGraph` e `AdjacencyListGraph`).
+
+| Requisito | Teste | Resultado esperado |
+| --------- | ----- | ------------------ |
+| `getVertexCount()` | `test_getVertexCount` | Retorna o número de vértices do construtor |
+| `getEdgeCount()` / `hasEdge()` | `test_add_edge_idempotent_and_counts` | Contagem correta; `hasEdge` reflete estado |
+| `addEdge` idempotente | `test_add_edge_idempotent_and_counts` | Segunda chamada não duplica aresta |
+| Sem laços | `test_disallow_self_loops` | `ValueError` em `addEdge(u,u)` |
+| `removeEdge` inconsistente | `test_remove_edge_inconsistent_raises` | `ValueError` se aresta não existe |
+| Pesos de vértice | `test_set_get_vertex_weights` | `set`/`get` com valor numérico |
+| Pesos de aresta | `test_set_get_edge_weights_only_if_edge_exists` | Só em aresta existente; senão `ValueError` |
+| `isSucessor` / `isPredessor` | `test_isSucessor_isPredessor` | Coerente com direção do arco |
+| `isDivergent` / `isConvergent` / `isIncident` | `test_isDivergent_isConvergent_isIncident` | Verdadeiro só quando arcos existem |
+| Graus | `test_degrees` | In/out degree corretos |
+| `isConnected` (fraca) | `test_isConnected_weak` | `False` desconectado; `True` conectado |
+| `isEmptyGraph` / `isCompleteGraph` | `test_empty_and_complete_graph` | Vazio sem arestas; completo com `n(n-1)` arcos |
+| `exportToGEPHI` | `test_exportToGEPHI_graphml` | Arquivo GraphML não vazio |
+| Índices inválidos | `test_invalid_vertex_index_raises`, `test_invalid_edge_index_on_weight_ops_raises` | `IndexError` |
+| Construtor inválido | `test_invalid_num_vertices_constructor` | `ValueError` ou `TypeError` |
+| Tipos inválidos | `test_invalid_vertex_type_raises` | `TypeError` |
+
+Demonstração manual de todas as operações: `python demo_app.py`
+
+## Plano de aceitação — Etapa 1 (mineração)
+
+| Requisito | Teste | Resultado esperado |
+| --------- | ----- | ------------------ |
+| Comentário em issue gera `COMMENT` + `ISSUE_OPEN_COMMENTED` | `test_extractor.test_issue_comment_generates_*` | Dois registros, `bob→alice` |
+| Comentário em PR gera só `COMMENT` | `test_extractor.test_pr_comment_generates_only_comment` | Sem `ISSUE_OPEN_COMMENTED` |
+| Fechamento de issue | `test_extractor.test_issue_close_event` | `ISSUE_CLOSE` |
+| Revisão/aprovação de PR | `test_extractor.test_pr_review_approved` | `PR_REVIEW` |
+| Merge de PR | `test_extractor.test_pr_merge` | `PR_MERGE` |
+| Ignora auto-interação | `test_extractor.test_issue_comment_ignores_self_comment` | Lista vazia |
+| Pesos do grafo integrado | `test_extractor.GraphFactoryWeightTests` | Pesos 2/3/4/5 acumulados |
+| Sample JSON + construção de grafos | `test_mining` | Grafos com vértices e arestas |
+| Cache válido/inválido | `test_cache` | Meta compatível aceita; incompatível rejeita |
+
+## Plano de aceitação — Etapa 3 (métricas)
+
+| Métrica | Teste | Resultado esperado |
+| ------- | ----- | ------------------ |
+| Densidade | `test_metrics.test_density_directed_triangle` | `E / (n(n-1))` |
+| Degree centrality | `test_metrics.test_degree_centrality_star_out` | Hub com grau máximo normalizado |
+| Eigenvector centrality | `test_metrics.test_eigenvector_star_center_highest` | Maior score no hub da estrela |
+| PageRank | `test_metrics.test_pagerank_positive_and_normalized` | Soma ≈ 1, valores positivos |
+| Betweenness | `test_metrics.test_betweenness_path_middle_highest` | Vértice intermediário maior |
+| Pipeline completo | `test_metrics.test_compute_metrics_includes_eigenvector` | Todas as métricas presentes |
+
 ## Entrega (checklist do PDF)
 
 - [ ] Código fonte (este repositório)
