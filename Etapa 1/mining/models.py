@@ -1,3 +1,5 @@
+# Modelos de dados para representar interações entre colaboradores do GitHub, incluindo tipos de interação e pesos para construção de grafos.
+
 from __future__ import annotations
 
 from dataclasses import dataclass

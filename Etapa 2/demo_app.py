@@ -4,7 +4,7 @@ from pathlib import Path
 
 from graph import AdjacencyListGraph, AdjacencyMatrixGraph, AbstractGraph
 
-
+# Este script é uma demonstração prática da implementação das classes de grafo, exercitando os métodos obrigatórios e exportando os resultados para arquivos GraphML que podem ser visualizados no Gephi. Ele inclui testes de funcionalidade, tratamento de exceções esperadas e uma estrutura organizada para facilitar a compreensão do comportamento dos grafos implementados.
 def _section(title: str) -> None:
     print(f"\n--- {title} ---")
 

@@ -1,3 +1,7 @@
+# Implementação de grafo usando listas de adjacência.
+# Vantagens: uso O(V + E) de memória, eficiente para grafos esparsos.
+# Desvantagens: acesso O(k) para hasEdge (k = grau de vértice), implementação um pouco mais complexa.
+
 from __future__ import annotations
 
 from typing import Dict, List

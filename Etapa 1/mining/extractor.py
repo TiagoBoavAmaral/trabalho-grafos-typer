@@ -1,3 +1,4 @@
+# Extrai interações entre colaboradores a partir da API do GitHub, com suporte a cache e paralelização.
 from __future__ import annotations
 
 import json

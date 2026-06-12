@@ -1,3 +1,5 @@
+# Testes para a funcionalidade de cache do extrator de interações, garantindo que o cache seja carregado corretamente quando válido e rejeitado quando inválido.
+
 import json
 import tempfile
 import unittest

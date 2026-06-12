@@ -15,10 +15,10 @@ from analysis import compute_metrics
 from mining import InteractionExtractor, build_graphs_from_interactions
 from mining.graph_factory import GraphSet
 
-
+# Configurações padrão
 DEFAULT_REPO = "fastapi/typer"
 
-
+# Este script é o ponto de entrada para a aplicação, permitindo extrair interações do GitHub, construir grafos, calcular métricas e exportar resultados, tudo controlado por um menu interativo.
 def _print_top_users(graph_set: GraphSet, metrics, top_n: int = 10) -> None:
     idx_to_user = {i: u for u, i in graph_set.user_index.items()}
     g = graph_set.integrated_graph
@@ -30,6 +30,7 @@ def _print_top_users(graph_set: GraphSet, metrics, top_n: int = 10) -> None:
     print(f"Assortatividade: {metrics.assortativity:.4f}")
     print(f"Modularidade (comunidades): {metrics.modularity:.4f}")
 
+    # Função auxiliar para imprimir o top N usuários por uma métrica específica
     def top(metric_map, title):
         ranked = sorted(metric_map.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
         print(f"\nTop {top_n} — {title}:")
@@ -47,7 +48,7 @@ def _print_top_users(graph_set: GraphSet, metrics, top_n: int = 10) -> None:
         for vid in metrics.bridging_ties:
             print(f"  {idx_to_user[vid]}")
 
-
+# Funções auxiliares para exportação de grafos e métricas, além de um menu interativo para controlar o fluxo da aplicação.
 def _export_graphs(graph_set: GraphSet, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     graph_set.comments_graph.exportToGEPHI(str(out_dir / "grafo1_comentarios.graphml"))
@@ -146,7 +147,7 @@ def load_or_mine_interactions(
 
     return interactions
 
-
+# Função para executar o pipeline completo de extração, construção de grafos, cálculo de métricas e exportação, controlada por um menu interativo.
 def run_pipeline(
     repo: str,
     offline: bool,

@@ -1,3 +1,4 @@
+# Construção de grafos de interação entre colaboradores a partir de uma lista de interações extraídas do GitHub.
 from __future__ import annotations
 
 from dataclasses import dataclass

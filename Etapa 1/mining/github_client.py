@@ -1,3 +1,5 @@
+# Cliente mínimo da API REST do GitHub, sem dependências externas, para extrair dados de issues e pull requests.
+
 from __future__ import annotations
 
 import json

@@ -1,3 +1,7 @@
+# Implementação de grafo usando matriz de adjacência.
+# Vantagens: acesso O(1) para hasEdge, fácil implementação.
+# Desvantagens: uso O(V^2) de memória, ineficiente para grafos esparsos.
+
 from __future__ import annotations
 
 from typing import List
